@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "E5E+PyPylqN7QiISwWnwnu0JShPdAoQsNKMH8kkc7lQ=",
+  "Source": "MangaStore.Catalog",
+  "BasePath": "_content/MangaStore.Catalog",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
