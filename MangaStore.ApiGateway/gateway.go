@@ -16,8 +16,12 @@ type ServiceRegistration struct {
 	Url string
 }
 
+const (
+	Catalog   Service = "Catalog"
+	Inventory Service = "Inventory"
+)
+
 type ApiGateway struct {
-	sd *ServiceDiscovery
 	lb *LoadBalancer
 	cache *Cache
 	router *gin.Engine
@@ -27,7 +31,6 @@ type ApiGateway struct {
 
 func NewApiGateway(timeoutTime, maxConcurrentTasks int64) *ApiGateway {
 	return &ApiGateway{
-		sd: NewServiceDiscovery(),
 		lb: NewLoadBalancer(),
 		cache: NewCache(),
 		router: gin.Default(),
@@ -37,9 +40,10 @@ func NewApiGateway(timeoutTime, maxConcurrentTasks int64) *ApiGateway {
 }
 
 func (g *ApiGateway) Run() {
-	// Service Discovery Routes
-	g.router.POST("catalog/register", g.registerCatalogHandler)
-	g.router.POST("inventory/register", g.registerInventoryHandler)
+	// Status endpoint
+	g.router.GET("status", func(ctx *gin.Context) {
+		ctx.Writer.WriteHeader(200)
+	})
 
 	// Catalog Routes
 	g.router.GET("catalog", g.catalogGetAllHandler)
@@ -109,8 +113,34 @@ func (g *ApiGateway) inventoryAddOrderHandler(c *gin.Context) {
 }
 
 func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, urlSuffix, param string) {
+	// handle get registry from Service Discovery
+	registry := make(map[string][]string)
+
+	res, err := http.Get("http://localhost:8081/services")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error requesting service discovery registry"})
+		return
+	}
+
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading response body"})
+		return
+	}
+
+	err = json.Unmarshal(body, &registry)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	// handle load balancing
+	url := g.lb.GetNext(registry, serviceType)
+	
 	path := "/" + urlSuffix
-	url := g.lb.GetNext(g.sd.Registry, serviceType)
 
 	if param != "" {
 		paramValue := c.Param(param)
@@ -118,16 +148,26 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	}
 	
 	url = url + path
-	log.Println(url)
 
+	// handle task concurrency limit
+	select {
+	case g.taskCh <- struct{}{}:
+		defer func() {
+			<-g.taskCh 
+		}()
+	default:
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Concurrent task limit reached"})
+		return
+	}
+
+	
+	// handle task timeout
 	ctx, cancel := context.WithTimeout(context.Background(), g.timeoutTime * time.Second)
 	defer cancel()
 
-	g.taskCh <- struct{}{}
-	defer func() {
-		<-g.taskCh 
-	}()
+	time.Sleep(10 * time.Second)
 
+	// handle cache
 	if serviceType == Catalog && method == "GET" {
 		val, err := g.cache.client.Get(context.Background(), path).Result()
 
@@ -138,6 +178,7 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 		}
 	}
 
+	// handle redirect request
 	reqBody, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading request body"})
@@ -147,19 +188,22 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(reqBody))
 
+	log.Println(url)
+
 	if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
     }
 
 	req = req.WithContext(ctx)
-    res, err := client.Do(req)
+    res, err = client.Do(req)
 
+	
     if err != nil {
-        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
     }
-
+	
     defer res.Body.Close()
 
 	resBody, err := io.ReadAll(res.Body)
@@ -169,6 +213,7 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 		return
 	}
 
+	// handle write to cache
 	if serviceType == Catalog && method == "GET" {
 		err := g.cache.client.Set(context.Background(), path, resBody, 5 * time.Minute).Err()
 
@@ -178,30 +223,4 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	}
 
 	c.JSON(res.StatusCode, gin.H{"data": string(resBody)})
-}
-
-func (g *ApiGateway) registerCatalogHandler(c *gin.Context) {
-	g.baseRegisterHandler(c, Catalog)
-}
-
-func (g *ApiGateway) registerInventoryHandler(c *gin.Context) {
-	g.baseRegisterHandler(c, Inventory)
-}
-
-func (g *ApiGateway) baseRegisterHandler(c *gin.Context, serviceType Service) {
-	reqBody, err := io.ReadAll(c.Request.Body)
-
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading request body"})
-		return
-	}
-
-	var obj ServiceRegistration
-
-	if err = json.Unmarshal(reqBody, &obj); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing request body"})
-        return
-    }
-
-	g.sd.Register(serviceType, obj.Url)
 }

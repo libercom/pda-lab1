@@ -10,7 +10,10 @@ import (
 
 type Service string
 
-type Registry map[Service][]string
+type Registry struct {
+	Inventory []string `json:"Inventory"`
+	Catalog   []string `json:"Catalog"`
+}
 
 const (
 	Catalog   Service = "Catalog"
@@ -27,8 +30,12 @@ type ServiceRegistration struct {
 }
 
 func NewServiceDiscovery() *ServiceDiscovery {
+	registry := Registry{}
+	registry.Inventory = []string{}
+	registry.Catalog = []string{}
+
 	return &ServiceDiscovery{
-		registry: make(map[Service][]string),
+		registry: registry,
 		router:   gin.Default(),
 	}
 }
@@ -42,13 +49,14 @@ func (sd *ServiceDiscovery) Run() {
 }
 
 func (sd *ServiceDiscovery) getServicesHandler(c *gin.Context) {
-	obj, err := json.Marshal(sd.registry)
+	err := json.NewEncoder(c.Writer).Encode(sd.registry)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error encoding response body"})
 	}
 
-	c.JSON(http.StatusOK, string(obj))
+	c.Writer.WriteHeader(200)
+	c.Writer.Header().Set("Content-Type", "application/json")
 }
 
 func (sd *ServiceDiscovery) registerCatalogHandler(c *gin.Context) {
@@ -78,9 +86,9 @@ func (sd *ServiceDiscovery) baseRegisterHandler(c *gin.Context, serviceType Serv
 }
 
 func (sd *ServiceDiscovery) register(serviceType Service, url string) {
-	if sd.registry[serviceType] == nil {
-		sd.registry[serviceType] = []string{}
+	if serviceType == Inventory {
+		sd.registry.Inventory = append(sd.registry.Inventory, url)
+	} else {
+		sd.registry.Catalog = append(sd.registry.Catalog, url)
 	}
-
-	sd.registry[serviceType] = append(sd.registry[serviceType], url)
 }
