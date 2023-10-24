@@ -146,8 +146,6 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "*/*")
 
 	if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
