@@ -9,10 +9,13 @@ namespace MangaStore.Catalog.Controllers
     public class CatalogController : ControllerBase
     {
         private readonly CatalogService _catalogService;
-
-        public CatalogController(CatalogService catalogService)
+        private readonly IHttpClientFactory _httpClientFactory;
+        private readonly string _inventoryUrl;
+        public CatalogController(CatalogService catalogService, IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _catalogService = catalogService;
+            _httpClientFactory = httpClientFactory;
+            _inventoryUrl = configuration["InventoryServiceUrl"];
         }
 
         [HttpGet]
@@ -37,6 +40,14 @@ namespace MangaStore.Catalog.Controllers
             var manga = CreateMangaDto.MapToEntity(createMangaDto);
 
             await _catalogService.CreateAsync(manga);
+
+            HttpClient httpClient = _httpClientFactory.CreateClient();
+            HttpResponseMessage response = await httpClient.PostAsJsonAsync(_inventoryUrl, new SyncMangaStockDto { MangaId = manga.Id });
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode(500, "Internal Server Error");
+            }
 
             return CreatedAtAction(nameof(CreateManga), new { id = manga.Id }, manga);
         }

@@ -34,6 +34,14 @@ namespace MangaStore.Inventory.Controllers
                 new { createMangaStockDto.MangaId, createMangaStockDto.LocationId }, mangaStock);
         }
 
+        [HttpPost("sync")]
+        public async Task<IActionResult> SyncMangaStock(SyncMangaStockDto syncMangaStockDto)
+        {
+            await _mangaStockService.SyncMangaStockAsync(syncMangaStockDto.MangaId);
+
+            return NoContent();
+        }
+
         [HttpPut]
         public async Task<IActionResult> UpdateMangaStock(MangaStock mangaStock)
         {

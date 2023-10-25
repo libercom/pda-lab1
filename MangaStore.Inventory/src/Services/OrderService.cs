@@ -18,10 +18,26 @@ namespace MangaStore.Inventory.Services
             return await _context.Orders.ToListAsync();
         }
 
-        public async Task AddOrderAsync(Order order)
+        public async Task<Order> AddOrderAsync(Order order)
         {
+            var mangaStock = _context.MangaStocks.FirstOrDefault(x => x.MangaId == order.MangaId);
+            
+            if (mangaStock == null)
+            {
+                return null;
+            }
+
+            if (mangaStock.Quantity < order.Quantity)
+            {
+                return null;
+            }
+
+            mangaStock.Quantity -= order.Quantity;
             _context.Orders.Add(order);
+            
             await _context.SaveChangesAsync();
+
+            return order;
         }
     }
 }

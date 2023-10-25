@@ -1,4 +1,5 @@
 ﻿using MangaStore.Inventory.Context;
+using MangaStore.Inventory.Dtos;
 using MangaStore.Inventory.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,6 +50,27 @@ namespace MangaStore.Inventory.Services
             var mangaStocks = await GetByMangaIdAsync(mangaId);
 
             _context.RemoveRange(mangaStocks);
+            await _context.SaveChangesAsync();
+        }
+
+        public async Task SyncMangaStockAsync(Guid mangaId)
+        {
+            var locations = await _context.Locations.ToListAsync();
+
+            foreach (var location in locations)
+            {
+                MangaStock mangaStock = new()
+                {
+                    MangaId = mangaId,
+                    LocationId = location.Id,
+                    Quantity = 0,
+                    RestockDate = DateTime.UtcNow
+
+                };
+
+                _context.Add(mangaStock);
+            }
+
             await _context.SaveChangesAsync();
         }
     }

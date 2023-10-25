@@ -12,7 +12,7 @@ namespace MangaStore.Inventory.Dtos
         public string PhoneNumber { get; set; }
         public DateTimeOffset PickupDate { get; set; }
 
-        public static Order MapToEntity(CreateOrderDto createOrderDto)
+        public static Order MapToEntity(CreateOrderDto createOrderDto, decimal price)
         {
             return new Order
             {
@@ -23,6 +23,7 @@ namespace MangaStore.Inventory.Dtos
                 FullName = createOrderDto.FullName,
                 PhoneNumber = createOrderDto.PhoneNumber,
                 PickupDate = createOrderDto.PickupDate,
+                Price = price
             };
         }
     }
