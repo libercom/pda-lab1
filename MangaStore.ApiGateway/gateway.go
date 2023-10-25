@@ -165,8 +165,6 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	ctx, cancel := context.WithTimeout(context.Background(), g.timeoutTime * time.Second)
 	defer cancel()
 
-	time.Sleep(10 * time.Second)
-
 	// handle cache
 	if serviceType == Catalog && method == "GET" {
 		val, err := g.cache.client.Get(context.Background(), path).Result()
