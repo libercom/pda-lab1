@@ -89,9 +89,6 @@ services:
   mongodb:
     image: mongo:latest
     container_name: mongo_db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: myadmin
-      MONGO_INITDB_ROOT_PASSWORD: mypassword
     ports:
       - "27017:27017"
     volumes:
