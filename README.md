@@ -2,7 +2,7 @@
 
 > **Performed by:** Ignat Vasile, group FAF-202
 
-### Features I want to implement for this project:
+### Features I want to implement for this project
 
 - Trip Circuit Breaker if multiple reroutes happen.
 - Service High Availability.
@@ -10,7 +10,9 @@
 - Implement microservice-based 2 Phase Commits.
 - Consistent Hashing for Cache.
 
-### API Documentation:
+### API Documentation
+
+#### The endpoints can be accessed in any order. Just ensure that you create something before querying it because I didn't seed any data.
 
 ## <span class="tableTitle"><b><i>Catalog endpoints</i></b><span>
 
@@ -54,6 +56,16 @@
         width: 30%;
     }
 </style>
+
+### How to get it running
+
+1. Clone this repository to your local machine.
+2. Run the docker-compose up command.
+3. Run migrations.
+   - Navigate to MangaStore.Inventory directory.
+   - Make sure you have EF Core CLI tools version 6.0.22: `dotnet tool install --global dotnet-ef`
+   - Run the migrations: `dotnet ef database update --connection "Host=localhost:5432;Database=Inventory;Username=postgres;Password=Strongpassword1" --project .\src\MangaStore.Inventory.csproj`
+4. Enjoy the application.
 
 # PAD -- Project 1 Checkpoint 1
 
