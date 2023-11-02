@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -115,8 +116,9 @@ func (g *ApiGateway) inventoryAddOrderHandler(c *gin.Context) {
 func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, urlSuffix, param string) {
 	// handle get registry from Service Discovery
 	registry := make(map[string][]string)
-
-	res, err := http.Get("http://localhost:8081/services")
+	remoteRegistryUrl := os.Getenv("REMOTE_REGISTRY_URL")
+	log.Println("REMOTE REGISTRY", remoteRegistryUrl)
+	res, err := http.Get(remoteRegistryUrl)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error requesting service discovery registry"})
 		return

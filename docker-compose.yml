@@ -1,0 +1,106 @@
+version: "3"
+services:
+  gateway:
+    image: libercom/pad-gateway:latest
+    container_name: "gateway"
+    depends_on:
+      - postgres
+      - mongodb
+      - redis_db
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    environment:
+      - REDIS_CACHE=redis_cache:6379
+      - REMOTE_REGISTRY_URL=http://service_discovery:8081/services
+    networks:
+      pad-net:
+
+  service_discovery:
+    image: libercom/pad-service-discovery:latest
+    container_name: "service_discovery"
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    depends_on:
+      - gateway
+    networks:
+      pad-net:
+
+  manga_inventory:
+    image: libercom/pad-manga-inventory:latest
+    container_name: "manga_inventory"
+    restart: unless-stopped
+    ports:
+      - "7256:7256"
+    depends_on:
+      - service_discovery
+    environment:
+      - ASPNETCORE_URLS=http://*:7256
+      - ApiGatewayUrl=http://service_discovery:8081/inventory/register
+      - CatalogServiceUrl=http://manga_catalog:7108/api/mangas
+      - BaseUrl=http://manga_inventory:7256/api
+      - ConnectionStrings__Default=Host=postgres_db:5432;Database=Inventory;Username=postgres;Password=Strongpassword1
+    networks:
+      pad-net:
+
+  manga_catalog:
+    image: libercom/pad-manga-catalog:latest
+    container_name: "manga_catalog"
+    restart: unless-stopped
+    ports:
+      - "7108:7108"
+    depends_on:
+      - service_discovery
+    environment:
+      - ASPNETCORE_URLS=http://*:7108
+      - ApiGatewayUrl=http://service_discovery:8081/catalog/register
+      - InventoryServiceUrl=http://manga_inventory:7256/api/stocks/sync
+      - BaseUrl=http://manga_catalog:7108/api
+      - CatalogDatabase__ConnectionString=mongodb://mongo_db:27017
+      - CatalogDatabase__DatabaseName=MangaStore
+      - CatalogDatabase__MangasCollectionName=Mangas
+    networks:
+      pad-net:
+
+  redis_db:
+    image: redis:latest
+    container_name: "redis_cache"
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      pad-net:
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Strongpassword1
+      POSTGRES_DB: Inventory
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      pad-net:
+
+  mongodb:
+    image: mongo:latest
+    container_name: mongo_db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: myadmin
+      MONGO_INITDB_ROOT_PASSWORD: mypassword
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      pad-net:
+
+volumes:
+  postgres_data:
+  mongodb_data:
+networks:
+  pad-net:
