@@ -39,24 +39,6 @@
 
 </br>
 
-<style>
-    table {
-        width: 100%;
-    }
-
-    table th:nth-of-type(1) {
-        width: 40%;
-    }
-
-    table th:nth-of-type(2) {
-        width: 20%;
-    }
-
-    table th:nth-of-type(3) {
-        width: 30%;
-    }
-</style>
-
 ### How to get it running
 
 1. Clone this repository to your local machine.
