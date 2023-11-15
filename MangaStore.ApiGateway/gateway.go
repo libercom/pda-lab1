@@ -24,18 +24,22 @@ const (
 
 type ApiGateway struct {
 	lb *LoadBalancer
+	cb *CircuitBreaker
 	cache *Cache
 	router *gin.Engine
 	timeoutTime time.Duration
+	maxReroutes int64
 	taskCh chan struct{}
 }
 
-func NewApiGateway(timeoutTime, maxConcurrentTasks int64) *ApiGateway {
+func NewApiGateway(timeoutTime, maxConcurrentTasks, maxReroutes int64) *ApiGateway {
 	return &ApiGateway{
 		lb: NewLoadBalancer(),
+		cb: NewCircuitBreaker(),
 		cache: NewCache(),
 		router: gin.Default(),
 		timeoutTime: time.Duration(timeoutTime),
+		maxReroutes: maxReroutes,
 		taskCh: make(chan struct{}, maxConcurrentTasks),
 	}
 }
@@ -69,56 +73,61 @@ func (g *ApiGateway) Run() {
 
 // Catalog Handlers
 func (g *ApiGateway) catalogGetAllHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "GET", "mangas", "")
+	g.baseHandler(c, Catalog, "GET", "mangas", "", 0)
 }
 
 func (g *ApiGateway) catalogGetByIdHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "GET", "mangas", "id")
+	g.baseHandler(c, Catalog, "GET", "mangas", "id", 0)
 }
 
 func (g *ApiGateway) catalogAddMangaHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "POST", "mangas", "")
+	g.baseHandler(c, Catalog, "POST", "mangas", "", 0)
 }
 
 func (g *ApiGateway) catalogDeleteHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "DELETE", "mangas", "id")
+	g.baseHandler(c, Catalog, "DELETE", "mangas", "id", 0)
 }
 
 // Inventory Handlers
 func (g *ApiGateway) inventoryGetStocksByMangaIdHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "GET", "stocks", "mangaId")
+	g.baseHandler(c, Inventory, "GET", "stocks", "mangaId", 0)
 }
 
 func (g *ApiGateway) inventoryAddStockHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "POST", "stocks", "")
+	g.baseHandler(c, Inventory, "POST", "stocks", "", 0)
 }
 
 func (g *ApiGateway) inventoryUpdateStockHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "PUT", "stocks", "")
+	g.baseHandler(c, Inventory, "PUT", "stocks", "", 0)
 }
 
 func (g *ApiGateway) inventoryGetAllLocationsHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "GET", "locations", "")
+	g.baseHandler(c, Inventory, "GET", "locations", "", 0)
 }
 
 func (g *ApiGateway) inventoryAddLocationHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "POST", "locations", "")
+	g.baseHandler(c, Inventory, "POST", "locations", "", 0)
 }
 
 func (g *ApiGateway) inventoryGetAllOrdersHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "GET", "orders", "")
+	g.baseHandler(c, Inventory, "GET", "orders", "", 0)
 }
 
 func (g *ApiGateway) inventoryAddOrderHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "POST", "orders", "")
+	g.baseHandler(c, Inventory, "POST", "orders", "", 0)
 }
 
-func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, urlSuffix, param string) {
+func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, urlSuffix, param string, rerouteCount int64) {
+	if rerouteCount >= g.maxReroutes {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
+
 	// handle get registry from Service Discovery
 	registry := make(map[string][]string)
 	remoteRegistryUrl := os.Getenv("REMOTE_REGISTRY_URL")
-	log.Println("REMOTE REGISTRY", remoteRegistryUrl)
 	res, err := http.Get(remoteRegistryUrl)
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error requesting service discovery registry"})
 		return
@@ -141,15 +150,27 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 
 	// handle load balancing
 	url := g.lb.GetNext(registry, serviceType)
+
+	if url == "" {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Bad gateway"})
+		return
+	}
 	
 	path := "/" + urlSuffix
-
+	
 	if param != "" {
 		paramValue := c.Param(param)
 		path = path + "/" + paramValue
 	}
 	
 	url = url + path
+
+	isHealthy := g.cb.IsHealthy(url)
+
+	if !isHealthy {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		return
+	}
 
 	// handle task concurrency limit
 	select {
@@ -161,7 +182,6 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Concurrent task limit reached"})
 		return
 	}
-
 	
 	// handle task timeout
 	ctx, cancel := context.WithTimeout(context.Background(), g.timeoutTime * time.Second)
@@ -188,8 +208,6 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	client := &http.Client{}
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(reqBody))
 
-	log.Println(url)
-
 	if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
         return
@@ -197,10 +215,12 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 
 	req = req.WithContext(ctx)
     res, err = client.Do(req)
-
 	
     if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		g.cb.CheckService(url)
+		g.baseHandler(c, serviceType, method, urlSuffix, param, rerouteCount + 1)
+
+		log.Println(err.Error())
         return
     }
 	
