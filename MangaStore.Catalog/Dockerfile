@@ -13,6 +13,7 @@ COPY --from=build-env /app/out .
 
 ENV ASPNETCORE_ENVIRONMENT=Production
 
-EXPOSE 7108
+EXPOSE 5002
+EXPOSE 5003
 
 ENTRYPOINT ["dotnet", "MangaStore.Catalog.dll"]

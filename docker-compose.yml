@@ -2,6 +2,7 @@ version: "3"
 services:
   gateway:
     image: libercom/pad-gateway:latest
+    build: ./MangaStore.ApiGateway
     container_name: "gateway"
     depends_on:
       - postgres
@@ -18,6 +19,7 @@ services:
 
   service_discovery:
     image: libercom/pad-service-discovery:latest
+    build: ./MangaStore.ServiceDiscovery
     container_name: "service_discovery"
     restart: unless-stopped
     ports:
@@ -27,36 +29,76 @@ services:
     networks:
       pad-net:
 
-  manga_inventory:
+  manga_inventory1:
     image: libercom/pad-manga-inventory:latest
-    container_name: "manga_inventory"
+    build: ./MangaStore.Inventory
+    container_name: "manga_inventory1"
     restart: unless-stopped
     ports:
-      - "7256:7256"
+      - "5000:5000"
     depends_on:
       - service_discovery
     environment:
-      - ASPNETCORE_URLS=http://*:7256
+      - ASPNETCORE_URLS=http://*:5000
       - ApiGatewayUrl=http://service_discovery:8081/inventory/register
-      - CatalogServiceUrl=http://manga_catalog:7108/api/mangas
-      - BaseUrl=http://manga_inventory:7256/api
+      - CatalogServiceUrl=http://manga_catalog1:5002/api/mangas
+      - BaseUrl=http://manga_inventory1:5000/api
       - ConnectionStrings__Default=Host=postgres_db:5432;Database=Inventory;Username=postgres;Password=Strongpassword1
     networks:
       pad-net:
 
-  manga_catalog:
-    image: libercom/pad-manga-catalog:latest
-    container_name: "manga_catalog"
+  manga_inventory2:
+    image: libercom/pad-manga-inventory:latest
+    build: ./MangaStore.Inventory
+    container_name: "manga_inventory2"
     restart: unless-stopped
     ports:
-      - "7108:7108"
+      - "5001:5001"
     depends_on:
       - service_discovery
     environment:
-      - ASPNETCORE_URLS=http://*:7108
+      - ASPNETCORE_URLS=http://*:5001
+      - ApiGatewayUrl=http://service_discovery:8081/inventory/register
+      - CatalogServiceUrl=http://manga_catalog2:5003/api/mangas
+      - BaseUrl=http://manga_inventory2:5001/api
+      - ConnectionStrings__Default=Host=postgres_db:5432;Database=Inventory;Username=postgres;Password=Strongpassword1
+    networks:
+      pad-net:
+
+  manga_catalog1:
+    image: libercom/pad-manga-catalog:latest
+    build: ./MangaStore.Catalog
+    container_name: "manga_catalog1"
+    restart: unless-stopped
+    ports:
+      - "5002:5002"
+    depends_on:
+      - service_discovery
+    environment:
+      - ASPNETCORE_URLS=http://*:5002
       - ApiGatewayUrl=http://service_discovery:8081/catalog/register
-      - InventoryServiceUrl=http://manga_inventory:7256/api/stocks/sync
-      - BaseUrl=http://manga_catalog:7108/api
+      - InventoryServiceUrl=http://manga_inventory1:5000/api/stocks/sync
+      - BaseUrl=http://manga_catalog1:5002/api
+      - CatalogDatabase__ConnectionString=mongodb://mongo_db:27017
+      - CatalogDatabase__DatabaseName=MangaStore
+      - CatalogDatabase__MangasCollectionName=Mangas
+    networks:
+      pad-net:
+
+  manga_catalog2:
+    image: libercom/pad-manga-catalog:latest
+    build: ./MangaStore.Catalog
+    container_name: "manga_catalog2"
+    restart: unless-stopped
+    ports:
+      - "5003:5003"
+    depends_on:
+      - service_discovery
+    environment:
+      - ASPNETCORE_URLS=http://*:5003
+      - ApiGatewayUrl=http://service_discovery:8081/catalog/register
+      - InventoryServiceUrl=http://manga_inventory2:5001/api/stocks/sync
+      - BaseUrl=http://manga_catalog2:5003/api
       - CatalogDatabase__ConnectionString=mongodb://mongo_db:27017
       - CatalogDatabase__DatabaseName=MangaStore
       - CatalogDatabase__MangasCollectionName=Mangas
