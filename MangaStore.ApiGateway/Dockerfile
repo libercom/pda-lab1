@@ -15,6 +15,6 @@ ENV GIN_MODE=release
 
 COPY --from=builder /app/app /app/app
 
-EXPOSE 8081
+EXPOSE 8080
 
 CMD ["/app/app"]

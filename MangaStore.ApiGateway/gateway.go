@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type ServiceRegistration struct {
@@ -45,6 +47,20 @@ func NewApiGateway(timeoutTime, maxConcurrentTasks, maxReroutes int64) *ApiGatew
 }
 
 func (g *ApiGateway) Run() {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(httpRequestsTotal)
+	reg.MustRegister(customCounter)
+	customCounter.WithLabelValues("value1", "value2").Inc()
+
+	// Middleware
+	g.router.Use(func(c *gin.Context) {
+        httpRequestsTotal.WithLabelValues(c.Request.Method).Inc()
+        c.Next()
+    })
+
+	// Handler for metrics
+	g.router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg})))
+
 	// Status endpoint
 	g.router.GET("status", func(ctx *gin.Context) {
 		ctx.Writer.WriteHeader(200)

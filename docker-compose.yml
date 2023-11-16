@@ -138,6 +138,43 @@ services:
     networks:
       pad-net:
 
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    depends_on:
+      - gateway
+    volumes:
+      - ./Prometheus:/etc/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    networks:
+      pad-net:
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      pad-net:
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    depends_on:
+      - gateway
+    ports:
+      - "3100:3100"
+    networks:
+      pad-net:
+
 volumes:
   postgres_data:
   mongodb_data:
