@@ -243,7 +243,7 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	
     if err != nil {
 		log.Println("REROUTE:")
-		g.cb.CheckService(url)
+		g.cb.CheckService(url, g.timeoutTime)
 		g.baseHandler(c, serviceType, method, urlSuffix, param, rerouteCount + 1, reqBody)
 		log.Println(err.Error())
         return
