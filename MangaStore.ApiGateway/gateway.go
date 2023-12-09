@@ -78,7 +78,7 @@ func (g *ApiGateway) Run() {
 	g.router.POST("inventory/stocks", g.inventoryAddStockHandler)
 
 	g.router.GET("inventory/locations", g.inventoryGetAllLocationsHandler)
-	g.router.POST("inventory/locations", g.inventoryGetAllLocationsHandler)
+	g.router.POST("inventory/locations", g.inventoryAddLocationHandler)
 
 	g.router.GET("inventory/orders", g.inventoryGetAllOrdersHandler)
 	g.router.POST("inventory/orders", g.inventoryAddOrderHandler)
@@ -89,52 +89,54 @@ func (g *ApiGateway) Run() {
 
 // Catalog Handlers
 func (g *ApiGateway) catalogGetAllHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "GET", "mangas", "", 0)
+	g.baseHandler(c, Catalog, "GET", "mangas", "", 0, nil)
 }
 
 func (g *ApiGateway) catalogGetByIdHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "GET", "mangas", "id", 0)
+	g.baseHandler(c, Catalog, "GET", "mangas", "id", 0, nil)
 }
 
 func (g *ApiGateway) catalogAddMangaHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "POST", "mangas", "", 0)
+	g.baseHandler(c, Catalog, "POST", "mangas", "", 0, nil)
 }
 
 func (g *ApiGateway) catalogDeleteHandler(c *gin.Context) {
-	g.baseHandler(c, Catalog, "DELETE", "mangas", "id", 0)
+	g.baseHandler(c, Catalog, "DELETE", "mangas", "id", 0, nil)
 }
 
 // Inventory Handlers
 func (g *ApiGateway) inventoryGetStocksByMangaIdHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "GET", "stocks", "mangaId", 0)
+	g.baseHandler(c, Inventory, "GET", "stocks", "mangaId", 0, nil)
 }
 
 func (g *ApiGateway) inventoryAddStockHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "POST", "stocks", "", 0)
+	g.baseHandler(c, Inventory, "POST", "stocks", "", 0, nil)
 }
 
 func (g *ApiGateway) inventoryUpdateStockHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "PUT", "stocks", "", 0)
+	g.baseHandler(c, Inventory, "PUT", "stocks", "", 0, nil)
 }
 
 func (g *ApiGateway) inventoryGetAllLocationsHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "GET", "locations", "", 0)
+	g.baseHandler(c, Inventory, "GET", "locations", "", 0, nil)
 }
 
 func (g *ApiGateway) inventoryAddLocationHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "POST", "locations", "", 0)
+	g.baseHandler(c, Inventory, "POST", "locations", "", 0, nil)
 }
 
 func (g *ApiGateway) inventoryGetAllOrdersHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "GET", "orders", "", 0)
+	g.baseHandler(c, Inventory, "GET", "orders", "", 0, nil)
 }
 
 func (g *ApiGateway) inventoryAddOrderHandler(c *gin.Context) {
-	g.baseHandler(c, Inventory, "POST", "orders", "", 0)
+	g.baseHandler(c, Inventory, "POST", "orders", "", 0, nil)
 }
 
-func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, urlSuffix, param string, rerouteCount int64) {
+func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, urlSuffix, param string, rerouteCount int64, reqBody []byte) {
 	if rerouteCount >= g.maxReroutes {
+		rerouteCount = 0
+		log.Println("MAX REROUTES EXCEEDED")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
 		return
 	}
@@ -164,6 +166,8 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 		return
 	}
 
+	log.Println(registry)
+
 	// handle load balancing
 	url := g.lb.GetNext(registry, serviceType)
 
@@ -184,7 +188,8 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	isHealthy := g.cb.IsHealthy(url)
 
 	if !isHealthy {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Something went wrong"})
+		log.Println("REROUTE:")
+		g.baseHandler(c, serviceType, method, urlSuffix, param, rerouteCount + 1, reqBody)
 		return
 	}
 
@@ -215,10 +220,12 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 	}
 
 	// handle redirect request
-	reqBody, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading request body"})
-		return
+	if (reqBody == nil) {
+		reqBody, err = io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reading request body"})
+			return
+		}
 	}
 
 	client := &http.Client{}
@@ -229,13 +236,15 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
         return
     }
 
+	req.Header.Set("Content-Type", "application/json")
+
 	req = req.WithContext(ctx)
     res, err = client.Do(req)
 	
     if err != nil {
+		log.Println("REROUTE:")
 		g.cb.CheckService(url)
-		g.baseHandler(c, serviceType, method, urlSuffix, param, rerouteCount + 1)
-
+		g.baseHandler(c, serviceType, method, urlSuffix, param, rerouteCount + 1, reqBody)
 		log.Println(err.Error())
         return
     }
@@ -258,5 +267,8 @@ func (g *ApiGateway) baseHandler(c *gin.Context, serviceType Service, method, ur
 		}
 	}
 
+	log.Println(string(resBody))
+
 	c.JSON(res.StatusCode, gin.H{"data": string(resBody)})
+	rerouteCount = 0
 }

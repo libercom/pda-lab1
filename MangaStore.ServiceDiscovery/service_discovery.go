@@ -87,8 +87,22 @@ func (sd *ServiceDiscovery) baseRegisterHandler(c *gin.Context, serviceType Serv
 
 func (sd *ServiceDiscovery) register(serviceType Service, url string) {
 	if serviceType == Inventory {
-		sd.registry.Inventory = append(sd.registry.Inventory, url)
+		sd.registry.Inventory = removeDuplicates(append(sd.registry.Inventory, url))
 	} else {
-		sd.registry.Catalog = append(sd.registry.Catalog, url)
+		sd.registry.Catalog = removeDuplicates(append(sd.registry.Catalog, url))
 	}
+}
+
+func removeDuplicates(arr []string) []string {
+    encountered := map[string]bool{}    
+    result := []string{}                
+
+    for _, v := range arr {
+        if encountered[v] == false {
+            encountered[v] = true     
+            result = append(result, v) 
+        }
+    }
+
+    return result
 }

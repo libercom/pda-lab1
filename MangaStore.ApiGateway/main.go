@@ -1,5 +1,5 @@
 package main
 
 func main() {
-	NewApiGateway(5, 1, 3).Run()
+	NewApiGateway(2, 10, 3).Run()
 }
