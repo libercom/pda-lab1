@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Mvc;
 using MangaStore.Catalog.Config;
 using MangaStore.Catalog.Services;
+using MangaStore.Catalog.Middleware;
+using Microsoft.AspNetCore.Builder;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -39,13 +41,20 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("Default");
 
-app.UseAuthorization();
+app.UseRouting();
 
+app.UseAuthorization();
+app.UseMiddleware<RequestCountMiddleware>();
 app.MapGet("/status", () =>
 {
     return Results.Ok();
 });
-app.MapControllers();
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllers();
+
+    endpoints.MapMetrics();
+});
 
 var client = new HttpClient();
 var url = app.Configuration["ApiGatewayUrl"];

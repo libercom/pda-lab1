@@ -1,6 +1,8 @@
+using MangaStore.Catalog.Middleware;
 using MangaStore.Inventory.Context;
 using MangaStore.Inventory.Services;
 using Microsoft.EntityFrameworkCore;
+using Prometheus;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,13 +31,20 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseAuthorization();
+app.UseRouting();
 
+app.UseAuthorization();
+app.UseMiddleware<RequestCountMiddleware>();
 app.MapGet("/status", () =>
 {
     return Results.Ok();
 });
-app.MapControllers();
+app.UseEndpoints(endpoints =>
+{
+    endpoints.MapControllers();
+
+    endpoints.MapMetrics();
+});
 
 var client = new HttpClient();
 var url = app.Configuration["ApiGatewayUrl"];

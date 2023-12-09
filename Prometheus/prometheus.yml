@@ -5,3 +5,27 @@ scrape_configs:
     static_configs:
       - targets:
           - gateway:8080
+  - job_name: catalog1_logs
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - manga_catalog1:5002
+  - job_name: catalog2_logs
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - manga_catalog2:5003
+  - job_name: inventory1_logs
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - manga_inventory1:5000
+  - job_name: inventory2_logs
+    scrape_interval: 10s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - manga_inventory2:5001
